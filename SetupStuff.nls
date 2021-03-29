@@ -1,0 +1,193 @@
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------ This is the main setup function which is just a list of other functions defined below.
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+to setup                              ; this is the main setup function, composed of all the smaller setup tasks defined below
+  clear-turtles                       ; the first thing, is to clear all of the agents from the board, in case there are any left over from a previous model
+  reset-ticks                         ; similarly for # of rounds, we want to start fresh
+
+  ask patches [set pcolor white]      ; this sets the color of the background (the tiles of the background are called patches)
+
+  setup-population                    ; creates all of the agents and their visible features
+  setup-scientists                    ; gives each scientist a credence
+  setup-media                         ; finishes the visual attributes for the propadandist
+  setup-policy_makers                 ; gives each policy_maker a credence
+
+  setup-scientists_colleagues         ; defines the connections between the scientists
+  setup-other_communications          ; defines all of the other connections
+
+  refreshDisplay
+end
+
+
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------ These functions establish the agents themselves.
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+to setup-population ;;Creates the population and their visual attributes (not position)
+  set-default-shape turtles "person"
+  create-scientists NumberOfScientists [set color 8]
+  create-media 1 [set color 14]
+  create-policy_makers NumberOfPolicyMakers [set color 88]
+  ask turtles [ set size 2 ]
+end
+
+to setup-scientists
+  ask scientists
+  [
+    ifelse ScientistsStartAt1?       ; This checks to see if we want to (for some reason) start all of the scientists out at credence 100%. 
+    [
+      set credence 1
+    ]
+    [
+      set credence random-float 1    ; assuming we don't, the credence is then set at a random number between 0 and 1
+    ]
+    credence_reposition
+    make_credence_label
+  ]
+end
+
+to setup-media
+  ask medium NumberOfScientists ; Since the media are the second group of turtles created, NumberOfScientists = who# of the first medium
+  [
+    bias_reposition
+    make_bias_label
+  ]
+end
+
+to setup-policy_makers
+  ask policy_makers
+  [
+    ifelse PolicyMakersStartAt1?
+    [
+      set credence 1
+    ]
+    [
+      set credence random-float 1
+    ]
+    credence_reposition
+    make_credence_label
+  ]
+end
+
+
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------ These functions establish the network/connections.
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+to setup-scientists_colleagues
+  if ScientistNetworkStructure = "Cyclic"
+  [
+    let i 0
+    let j i + 1
+    while [i < NumberOfScientists - 1]
+    [
+      ask scientist i [create-colleague-with scientist j]
+      set i j
+      set j j + 1
+    ]
+    ask scientist i [create-colleague-with scientist 0]
+  ]
+
+  if ScientistNetworkStructure = "Complete"
+  [
+    ask scientists [create-colleagues-with other scientists]
+  ]
+
+  ask communications [set color 8]
+  
+  if ScientistNetworkStructure = "In Between"
+  [
+    ask scientists [create-colleagues-with n-of ( - 1) other scientists]
+  ]
+
+  ask communications [set color 8]
+end
+to setup-other_communications
+  ask media
+  ;the differences in the types is largely for counting purposes
+  [
+    create-communications-with scientists
+    create-colleagues-with policy_makers
+  ]
+
+  ;starting from the last turtle (who's a PM) and working backwards (for all PMs), each create communications with j scientists
+  let i 0 ; PM index
+  let j 0 ; SCI index
+  while [i < NumberOfPolicyMakers]
+  [
+    set j 0
+    while [j < SLT]
+    [
+      ask policy_maker (max [who] of turtles - i) [create-communication-with scientist ((j + i) mod NumberOfScientists)] ; use n-of to choose n members randomly from an agent set
+      set j j + 1
+    ]
+    set i i + 1
+  ]
+end
+
+
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------ These commands are for display purposes but don't affect the mechanics of the model.
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+to make_credence_label
+    if LabelsDisplayed = "Credence level"
+    [
+      set label precision credence 2
+    ]
+    if LabelsDisplayed = "Log of odds"
+    [
+    set label precision logodd 2
+    ]
+    if LabelsDisplayed = "ID number"
+    [
+      set label who
+    ]
+    ifelse credence >= .5 [set label-color green][set label-color red]
+end
+to make_bias_label
+  set label "PROPAGANDIST    "
+  set label-color red
+end
+to credence_reposition
+  ;setxy ((who / count turtles) * max-pxcor) (log logodd 5)
+
+  setxy ((who / count turtles) * max-pxcor) (max-pycor * credence)
+end
+to bias_reposition
+  setxy (((NumberOfScientists + 1) / count turtles) * max-pxcor) (max-pycor / 2)
+end
+
+to refreshDisplay
+  ask scientists [ make_credence_label ]
+  ask policy_makers [ make_credence_label ]
+  ask scientists
+  [
+    ask my-colleagues
+    [
+      set color ifelse-value ShowScienceNetwork? [8][white]
+    ]
+  ]
+  ask media
+  [
+    ask my-links
+    [
+      set color ifelse-value ShowMediaConnections? [grey][white]
+    ]
+  ]
+  ask policy_makers
+  [
+    ask my-links
+    [
+      if is-scientist? other-end [set color ifelse-value ShowStoPConnections? [grey][white]]
+    ]
+  ]
+end
+
+
+

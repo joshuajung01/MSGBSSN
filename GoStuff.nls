@@ -1,0 +1,174 @@
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------ These are the globals and the main go function. The go function is basically just a list of other functions that we define below.
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+globals
+[
+  ConThresh     ;;consensus threshold written out as a .9...
+  LagScore_ER   ;; the difference between the scientists' average credence and the public's in this round
+  LagScore_OT   ;; the running total of the difference between the average credences
+]
+
+
+to go ;;Executes 1 round of the simulation
+  if count turtles = 0 [setup]  ; First check to see if the board has been setup, and if not, set it up first.
+  
+  scientists-research           ; the scientists with credence above 50% conduct research on Arm B
+  scientists-communicate        ; the scientists share what they have learned with each other
+  scientists-update             ; the scientists use the update function
+ 
+  ifelse SelectiveSharing?      ; this toggles whether or not the propagandist (selective sharing) will be in play
+  [
+   media-transmit               ; if it is on, then the media behave as described below
+  ]
+  [
+    ask media                   ; if it is off, then the media act as if they haven't any info
+    [
+      set my_k 0
+      set con_info []
+    ]
+  ]
+  
+  if (DoubleCount? = false and SelectiveSharing? = true)      ;If double count is off and there is selective sharing, then all negative info is provided by the media. So scientists only need to show the good stuff. Otherwise the public will update on any bad date they hear from scientists twice.
+  [                                                           ;(double counting means counting the misleading studies twice)
+    ask scientists with [my_k != true]                        ;For all the scientists that studied this round, do the following
+    [ if (my_k / TrialCount) < .5 [ set my_k true]]           ;if your studies are misleading don't worry about sharing them with the public (because the propogandist already has)
+  ]                                                           ;(this doesn't affect the scientists' updating, because they've already finished that part above)
+  
+  policy_makers-update                                        ; the policy makers use the data available on their connections to update
+  
+  
+  set LagScore_ER mean [logodd] of scientists - mean [logodd] of policy_makers         ; set the lag score for this round as the difference between the average scientist credence and average policy maker credence
+  set LagScore_OT LagScore_OT + LagScore_ER                                            ; then add it to the running total
+
+  tick                         ; now one round has passed, so we take a tally of that
+
+
+end
+
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------ These are the primary elements of the go function
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+to scientists-research
+  ask scientists
+  [
+    ifelse credence > .5                                                               ; For the scientists that believe that Arm B is in fact better,...
+    [
+      set B_results n-values TrialCount [random-float 1]                               ; form a list (the length of trialcount) of numbers between 0 and 1
+      set B_results map [ x -> ifelse-value x < (.5 + epsilon) [1][0]] B_results       ; turn these into 0's and 1's based on being above or below a the threshold set by epsilon which represent successes and failures
+      set my_k sum B_results                                                           ; count all of the 1's, that is, all of the successes for this scientist
+    ]
+    [
+      set my_k true                                                                    ; for the scientists that don't think that Arm B is better, they just leave their #ofSuccesses as a dummy variable
+    ]
+  ]
+end
+
+to scientists-communicate
+  ask scientists                                                                       ; Each scientist (one by one)...
+  [
+    ask my-colleagues                                                                  ; ...has each of her connections...
+    [
+      set link_info [my_k] of other-end                                                ; ... set their link_info as the results of whatever scientist is on the other end.
+    ]
+    set k sum [link_info] of my-colleagues                                             ; The scientist then sums up all of the successes that they've heard of.
+    set k k + ifelse-value my_k = true [0][my_k]                                       ; And they add that to the successes that they found.
+    set n ifelse-value credence > .5 [TrialCount][0]                                   ; To count the number of trials that these successes were found in, first take the amount that the scientist themself did (if any),
+    set n n + (TrialCount * count my-colleagues with [link_info != true])              ; and then add that to the amount of studies that the other scientists they are connected to have done (if any).
+  ]
+end
+
+to scientists-update
+  ask scientists
+  [
+    update                                                                             ; The scientists use the data they have already collected and update on it.
+  ]
+end
+
+to media-transmit
+  ask media
+  [
+    set info_pool [my_k] of scientists with [my_k != true]                             ; Get a list of all the results of all the scientists.
+    set pro_info filter [x -> x >= TrialCount / 2] info_pool                           ; Put all the results that are better than 50% into one list.
+    set con_info filter [x -> x < TrialCount / 2] info_pool                            ; Put all the results that are worse than 50% into another list (the misleading studies).
+    set my_k sum con_info                                                              ; Sum up all of the successes from the misleading studies,...
+   ]                                                                                   ; ... this is what the policy makers will recieve.
+end
+
+to policy_makers-update
+  ask policy_makers
+  [
+    ask my-links [ set link_info [my_k] of other-end ]                                                                                     ; Gather the results from all of the connections (including the scientists one is connected to and from the medium),...
+    set k sum [link_info] of my-links                                                                                                      ; ... and add all that together.
+    set n TrialCount * (((count my-links with [link_info != true]) - 1) + length [con_info] of medium NumberOfScientists)                  ; count all the scientists 
+    update
+  ]
+end
+
+to update                                                                                                                                  ; An agent (scientist or policy maker) takes the successes out of trials that they know of and move their credence according to Bayes'.
+  ifelse ( credence < ((10 ^ 16) - (10 ^ -16)) and credence > (10 ^ -16) )                                                                 ; Because of computational limits, if an agent goes too far in one direction, we don't worry about asking them to update again.
+  [
+    set credence (credence / (credence + ( (1 - credence) * ((.5 - epsilon) / (.5 + epsilon)) ^ (2 * k - n) )))                            ; This is the likelihood that the results I am seeing are caused by Arm B being better versus the likelihood that it was caused by Arm B if it were worse.
+    set logodd ifelse-value credence <= (10 ^ -16) [-16][ifelse-value credence >= 1 [16][(log credence 10) - (log (1 - credence) 10)]]     ; Following updating, we convert the credence into the logodd.
+    credence_reposition                                                                                                                    ; Then adjust the visual position...
+    make_credence_label                                                                                                                    ; ...and update the label.
+  ]
+  [stop]
+end
+
+
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------ These are for going till a certain stop condition
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+to go_sciConsensus 
+  set ConThresh (10 ^ ConsensusThreshold)
+  set ConThresh ((ConThresh - 1) / ConThresh)  
+  
+  go
+
+  if min [credence] of scientists > ConThresh
+  [stop]
+
+end
+
+to go_PMConsensus 
+  set ConThresh (10 ^ ConsensusThreshold)
+  set ConThresh ((ConThresh - 1) / ConThresh)
+  
+  go
+
+  if min [credence] of scientists > ConThresh and min [credence] of policy_makers > ConThresh
+  [stop]
+
+end
+
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;------------------------------ These are for iterating
+;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+to iterate
+  let i 0
+  while [i < strength]
+  [
+    setup
+    go_on
+    show sentence "ε =" Epsilon
+    show sentence "i =" i
+    set i i + 1
+  ]
+end
+
+to go_on 
+  set ConThresh (10 ^ ConsensusThreshold)
+  set ConThresh ((ConThresh - 1) / ConThresh)
+  while [( (min [credence] of scientists <= ConThresh) or ((min [credence] of policy_makers <= ConThresh) and (any? policy_makers with [abs logodd < 16]) ) ) and (max [credence] of scientists > .5)]
+  [
+    go
+  ]
+end
