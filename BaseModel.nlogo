@@ -8,7 +8,6 @@ __includes [ "SetupStuff.nls" "GoStuff.nls"]          ; This is the command to i
 
 globals
 [
-                                                      ;there are no global variables other than the ones given in the interface (with the sliders)
 ]
 
 
@@ -46,6 +45,7 @@ media-own
 ]
 policy_makers-own
 [
+  id          ; the identification number for each policy maker
   credence    ; the policy_maker's belief this round that Arm B is better that 50%
   k           ; the total number of successes a policy_maker is aware of
   n           ; the total number of trials a policy_maker is aware of

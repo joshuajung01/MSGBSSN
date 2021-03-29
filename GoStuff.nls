@@ -84,7 +84,7 @@ end
 to scientists-update
   ask scientists
   [
-    update                                                                             ; The scientists use the data they have already collected and update on it.
+    update1                                                                             ; The scientists use the data they have already collected and update on it.
   ]
 end
 
@@ -104,11 +104,11 @@ to policy_makers-update
     ask my-links [ set link_info [my_k] of other-end ]                                                                                     ; Gather the results from all of the connections (including the scientists one is connected to and from the medium),...
     set k sum [link_info] of my-links                                                                                                      ; ... and add all that together.
     set n TrialCount * (((count my-links with [link_info != true]) - 1) + length [con_info] of medium NumberOfScientists)                  ; count all the scientists 
-    update
+    update2
   ]
 end
 
-to update                                                                                                                                  ; An agent (scientist or policy maker) takes the successes out of trials that they know of and move their credence according to Bayes'.
+to update1                                                                                                                                 ; An agent (scientist or policy maker) takes the successes out of trials that they know of and move their credence according to Bayes'.
   ifelse ( credence < ((10 ^ 16) - (10 ^ -16)) and credence > (10 ^ -16) )                                                                 ; Because of computational limits, if an agent goes too far in one direction, we don't worry about asking them to update again.
   [
     set credence (credence / (credence + ( (1 - credence) * ((.5 - epsilon) / (.5 + epsilon)) ^ (2 * k - n) )))                            ; This is the likelihood that the results I am seeing are caused by Arm B being better versus the likelihood that it was caused by Arm B if it were worse.
@@ -119,7 +119,18 @@ to update                                                                       
   [stop]
 end
 
-
+to update2                                                                                                                                ; An agent (scientist or policy maker) takes the successes out of trials that they know of and move their credence according to Bayes'.
+  ifelse ( credence < ((10 ^ 16) - (10 ^ -16)) and credence > (10 ^ -16) )                                                                 ; Because of computational limits, if an agent goes too far in one direction, we don't worry about asking them to update again.
+  [
+    set credence (credence / (credence + ( (1 - credence) * ((.5 - epsilon) / (.5 + epsilon)) ^ (2 * k - n) )))                            ; This is the likelihood that the results I am seeing are caused by Arm B being better versus the likelihood that it was caused by Arm B if it were worse.
+    set credence (credence + (item (random (length credenceList)) credenceList)) / 2
+    set credenceList replace-item id credenceList credence
+    set logodd ifelse-value credence <= (10 ^ -16) [-16][ifelse-value credence >= 1 [16][(log credence 10) - (log (1 - credence) 10)]]     ; Following updating, we convert the credence into the logodd.
+    credence_reposition                                                                                                                    ; Then adjust the visual position...
+    make_credence_label                                                                                                                    ; ...and update the label.
+  ]
+  [stop]
+end
 ;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ;------------------------------ These are for going till a certain stop condition
@@ -132,7 +143,10 @@ to go_sciConsensus
   go
 
   if min [credence] of scientists > ConThresh
-  [stop]
+  [
+    print credenceList
+    stop
+  ]
 
 end
 

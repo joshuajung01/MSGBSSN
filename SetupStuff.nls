@@ -2,8 +2,18 @@
 ;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ;------------------------------ This is the main setup function which is just a list of other functions defined below.
 ;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
+globals
+[
+  idNum
+  credenceList
+  kList
+  nList
+]
 to setup                              ; this is the main setup function, composed of all the smaller setup tasks defined below
+  set credenceList n-values NumberOfPolicyMakers [0]
+  set kList n-values NumberOfPolicyMakers [0]
+  set nList n-values NumberOfPolicyMakers [0]
+  set idNum 0
   clear-turtles                       ; the first thing, is to clear all of the agents from the board, in case there are any left over from a previous model
   reset-ticks                         ; similarly for # of rounds, we want to start fresh
 
@@ -16,7 +26,7 @@ to setup                              ; this is the main setup function, compose
 
   setup-scientists_colleagues         ; defines the connections between the scientists
   setup-other_communications          ; defines all of the other connections
-
+  print credenceList
   refreshDisplay
 end
 
@@ -67,6 +77,9 @@ to setup-policy_makers
     [
       set credence random-float 1
     ]
+    set id idNum
+    set credenceList replace-item id credenceList credence
+    set idNum (idNum + 1)
     credence_reposition
     make_credence_label
   ]
